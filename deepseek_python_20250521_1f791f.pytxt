@@ -1,0 +1,182 @@
+import pandas as pd
+import numpy as np
+from .functionhelper import setup_logger
+import logging
+from typing import Union, List, Dict, Optional
+
+# Initialize logger for this module
+logger = setup_logger('dvl.pandashelper')
+
+def read_csv_with_logging(file_path: str, **kwargs) -> pd.DataFrame:
+    """
+    Read CSV file with logging and error handling.
+    
+    Args:
+        file_path: Path to CSV file
+        **kwargs: Additional arguments to pass to pd.read_csv()
+        
+    Returns:
+        pd.DataFrame: Loaded DataFrame
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        pd.errors.EmptyDataError: If file is empty
+    """
+    try:
+        logger.info(f"Attempting to read CSV file: {file_path}")
+        df = pd.read_csv(file_path, **kwargs)
+        logger.info(f"Successfully read CSV. Shape: {df.shape}")
+        return df
+    except FileNotFoundError:
+        logger.error(f"File not found: {file_path}")
+        raise
+    except pd.errors.EmptyDataError:
+        logger.error(f"Empty file: {file_path}")
+        raise
+    except Exception as e:
+        logger.error(f"Error reading CSV: {str(e)}")
+        raise
+
+def describe_columns(df: pd.DataFrame, columns: Optional[List[str]] = None) -> pd.DataFrame:
+    """
+    Get enhanced column statistics with logging.
+    
+    Args:
+        df: Input DataFrame
+        columns: List of columns to describe (None for all)
+        
+    Returns:
+        pd.DataFrame: Statistics for each column
+    """
+    cols = columns if columns else df.columns
+    logger.debug(f"Generating statistics for columns: {cols}")
+    
+    stats = []
+    for col in cols:
+        if col in df.columns:
+            col_stats = {
+                'column': col,
+                'type': str(df[col].dtype),
+                'count': df[col].count(),
+                'unique': df[col].nunique(),
+                'nulls': df[col].isnull().sum(),
+                'null_pct': round(df[col].isnull().mean() * 100, 2),
+            }
+            
+            if pd.api.types.is_numeric_dtype(df[col]):
+                col_stats.update({
+                    'mean': df[col].mean(),
+                    'std': df[col].std(),
+                    'min': df[col].min(),
+                    '25%': df[col].quantile(0.25),
+                    '50%': df[col].quantile(0.5),
+                    '75%': df[col].quantile(0.75),
+                    'max': df[col].max()
+                })
+            stats.append(col_stats)
+    
+    result = pd.DataFrame(stats)
+    logger.info(f"Generated statistics for {len(stats)} columns")
+    return result
+
+def handle_missing_values(
+    df: pd.DataFrame,
+    strategy: str = 'drop',
+    columns: Optional[List[str]] = None,
+    fill_value: Union[int, float, str] = None
+) -> pd.DataFrame:
+    """
+    Handle missing values with different strategies and logging.
+    
+    Args:
+        df: Input DataFrame
+        strategy: One of 'drop', 'fill', or 'ignore'
+        columns: Columns to apply to (None for all)
+        fill_value: Value to fill when strategy is 'fill'
+        
+    Returns:
+        pd.DataFrame: Processed DataFrame
+    """
+    cols = columns if columns else df.columns
+    logger.info(f"Handling missing values with strategy: {strategy}")
+    
+    if strategy == 'drop':
+        before = df.shape[0]
+        df = df.dropna(subset=cols)
+        after = df.shape[0]
+        logger.info(f"Dropped {before - after} rows with missing values")
+    elif strategy == 'fill':
+        if fill_value is None:
+            for col in cols:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    fill_val = df[col].mean()
+                else:
+                    fill_val = df[col].mode()[0]
+                df[col] = df[col].fillna(fill_val)
+                logger.debug(f"Filled missing values in {col} with {fill_val}")
+        else:
+            df[cols] = df[cols].fillna(fill_value)
+            logger.debug(f"Filled missing values with {fill_value}")
+    elif strategy == 'ignore':
+        logger.debug("Missing values ignored")
+    else:
+        logger.warning(f"Unknown strategy: {strategy}. Missing values unchanged")
+    
+    return df
+
+def merge_with_logging(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    how: str = 'inner',
+    **kwargs
+) -> pd.DataFrame:
+    """
+    Merge DataFrames with logging.
+    
+    Args:
+        left: Left DataFrame
+        right: Right DataFrame
+        how: Type of merge
+        **kwargs: Additional arguments to pd.merge()
+        
+    Returns:
+        pd.DataFrame: Merged DataFrame
+    """
+    logger.info(f"Merging DataFrames. Left shape: {left.shape}, Right shape: {right.shape}, How: {how}")
+    try:
+        merged = pd.merge(left, right, how=how, **kwargs)
+        logger.info(f"Merged successfully. Result shape: {merged.shape}")
+        return merged
+    except Exception as e:
+        logger.error(f"Merge failed: {str(e)}")
+        raise
+
+def filter_by_values(
+    df: pd.DataFrame,
+    filter_dict: Dict[str, Union[List, str, int, float]]
+) -> pd.DataFrame:
+    """
+    Filter DataFrame by multiple column values with logging.
+    
+    Args:
+        df: Input DataFrame
+        filter_dict: Dictionary of {column: values_to_keep}
+        
+    Returns:
+        pd.DataFrame: Filtered DataFrame
+    """
+    original_shape = df.shape
+    logger.debug(f"Original shape: {original_shape}")
+    logger.debug(f"Applying filters: {filter_dict}")
+    
+    mask = pd.Series([True] * len(df))
+    for col, values in filter_dict.items():
+        if col in df.columns:
+            if isinstance(values, list):
+                mask &= df[col].isin(values)
+            else:
+                mask &= (df[col] == values)
+    
+    filtered = df[mask]
+    logger.info(f"Filtered shape: {filtered.shape} (removed {original_shape[0] - filtered.shape[0]} rows)")
+    return filtered

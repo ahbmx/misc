@@ -1,0 +1,23 @@
+from dvl import setup_logger, read_csv_with_logging, describe_columns, handle_missing_values
+
+# Setup logger
+logger = setup_logger('main')
+
+try:
+    # Example usage of pandas helper functions
+    logger.info("Starting data processing")
+    
+    # Read CSV with logging
+    df = read_csv_with_logging('data.csv')
+    
+    # Get enhanced column statistics
+    stats = describe_columns(df)
+    print(stats)
+    
+    # Handle missing values
+    df_clean = handle_missing_values(df, strategy='fill')
+    
+    logger.info("Data processing completed successfully")
+except Exception as e:
+    logger.error(f"Error in data processing: {str(e)}")
+    raise

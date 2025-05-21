@@ -1,0 +1,96 @@
+import logging
+from logging.handlers import TimedRotatingFileHandler
+import os
+from datetime import datetime, timedelta
+import sys
+
+def setup_logger(name, log_file='application.log', log_to_console=True, backup_count=5):
+    """
+    Setup a logger that rotates logs daily and keeps them for 5 days.
+    
+    Args:
+        name (str): Logger name
+        log_file (str): Path to log file
+        log_to_console (bool): Whether to log to console
+        backup_count (int): Number of days to keep logs (default 5)
+    
+    Returns:
+        logging.Logger: Configured logger instance
+    """
+    # Create logger
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    # Clear any existing handlers
+    logger.handlers.clear()
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # File handler with daily rotation and 5-day retention
+    file_handler = TimedRotatingFileHandler(
+        log_file,
+        when='midnight',  # Rotate at midnight
+        interval=1,       # Every day
+        backupCount=backup_count
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # Console handler if enabled
+    if log_to_console:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    
+    # Clean up old log files on startup
+    _cleanup_old_logs(log_file, backup_count)
+    
+    return logger
+
+def _cleanup_old_logs(base_log_path, backup_count):
+    """
+    Clean up log files older than the retention period.
+    
+    Args:
+        base_log_path (str): Path to main log file
+        backup_count (int): Number of days to keep logs
+    """
+    log_dir = os.path.dirname(os.path.abspath(base_log_path))
+    base_name = os.path.basename(base_log_path)
+    
+    # Calculate cutoff date
+    cutoff_date = datetime.now() - timedelta(days=backup_count)
+    
+    for filename in os.listdir(log_dir):
+        if filename.startswith(base_name):
+            # For rotated files, the suffix is the date
+            file_path = os.path.join(log_dir, filename)
+            file_date = _get_logfile_date(file_path)
+            
+            if file_date and file_date < cutoff_date:
+                try:
+                    os.remove(file_path)
+                except OSError as e:
+                    logging.warning(f"Could not remove old log file {filename}: {e}")
+
+def _get_logfile_date(file_path):
+    """
+    Extract date from rotated log file name.
+    
+    Args:
+        file_path (str): Path to log file
+        
+    Returns:
+        datetime: Date extracted from filename or None
+    """
+    try:
+        # For files rotated by TimedRotatingFileHandler
+        if file_path.endswith('.log'):
+            return datetime.fromtimestamp(os.path.getmtime(file_path))
+        
+        # For rotated files (name.log.YYYY-MM-DD)
+        date_str = file_path.split('.')[-1]
+        return datetime.strptime(date_str, '%Y-%m-%d')
+    except (ValueError, IndexError):
+        return None

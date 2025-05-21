@@ -1,0 +1,94 @@
+Creating a Linux Service Script with Network Dependency
+To create a script that runs as a service, enables on boot, and waits for network availability, follow these steps:
+
+Method 1: Using systemd (Recommended for modern Linux distributions)
+Create your service script (e.g., /usr/local/bin/my_service.sh):
+
+bash
+#!/bin/bash
+
+# Wait for network connectivity
+while ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; do
+    echo "Waiting for network..."
+    sleep 1
+done
+
+# Your main service commands here
+echo "Network available, starting service..."
+# Add your service commands below
+Make it executable:
+
+bash
+sudo chmod +x /usr/local/bin/my_service.sh
+Create a systemd service file (/etc/systemd/system/my_service.service):
+
+ini
+[Unit]
+Description=My Custom Service
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/my_service.sh
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+Enable and start the service:
+
+bash
+sudo systemctl daemon-reload
+sudo systemctl enable my_service.service
+sudo systemctl start my_service.service
+Method 2: Using init.d (For older systems)
+Create your init script (/etc/init.d/my_service):
+
+bash
+#!/bin/bash
+# chkconfig: 2345 99 01
+# description: My Custom Service
+
+case "$1" in
+    start)
+        # Wait for network
+        while ! ping -c 1 -W 1 8.8.8.8 >/dev/null 2>&1; do
+            echo "Waiting for network..."
+            sleep 1
+        done
+        
+        echo "Starting my service..."
+        # Add your startup commands here
+        ;;
+    stop)
+        echo "Stopping my service..."
+        # Add your shutdown commands here
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac
+
+exit 0
+Make it executable:
+
+bash
+sudo chmod +x /etc/init.d/my_service
+Enable the service:
+
+bash
+sudo update-rc.d my_service defaults  # On Debian/Ubuntu
+# OR
+sudo chkconfig my_service on          # On RHEL/CentOS
+Start the service:
+
+bash
+sudo service my_service start
+Notes:
+The ping test to 8.8.8.8 (Google DNS) checks for internet connectivity. You may want to replace this with a local gateway or specific host if you only need local network.
+
+For systemd services, network-online.target is the proper way to wait for network, but the ping check adds an extra layer of verification.
+
+Consider adding proper error handling and logging to your script for production use.
