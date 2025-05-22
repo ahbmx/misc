@@ -1,0 +1,9 @@
+[LOGGING]
+log_path = ./logs
+log_level = INFO
+log_file = application.log
+
+[GENERAL]
+output_path = ./output
+max_retries = 3
+default_timeout = 30
